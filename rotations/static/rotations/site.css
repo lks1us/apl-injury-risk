@@ -1,0 +1,211 @@
+body {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 15px;
+    font-family: Arial, sans-serif;
+    font-size: 16px;
+    color: #111;
+    background: #fff;
+}
+
+header {
+    border-bottom: 1px solid #999;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+}
+
+header h1 {
+    margin: 0 0 10px;
+    font-size: 28px;
+}
+
+a {
+    color: #0645ad;
+}
+
+nav a {
+    margin-right: 15px;
+}
+
+footer {
+    margin-top: 30px;
+    border-top: 1px solid #999;
+    color: #555;
+}
+
+h1,
+h2,
+h3 {
+    margin-top: 15px;
+}
+
+.container {
+    margin-bottom: 20px;
+}
+
+.simple-hero,
+.panel,
+.metric-card,
+.filter-panel,
+.club-card {
+    border: 1px solid #bbb;
+    padding: 12px;
+    margin-bottom: 15px;
+    background: #fafafa;
+}
+
+.row {
+    display: block;
+}
+
+.col-6,
+.col-lg-3,
+.col-lg-5,
+.col-lg-7,
+.col-lg-12,
+.col-md-4,
+.col-md-6,
+.col-xl-3 {
+    width: auto;
+}
+
+.metrics-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+}
+
+.metric-label {
+    display: block;
+    color: #555;
+}
+
+.metric-card strong {
+    display: block;
+    margin-top: 8px;
+    font-size: 24px;
+}
+
+.panel-heading {
+    margin-bottom: 10px;
+}
+
+.panel-heading h1,
+.panel-heading h2 {
+    display: inline;
+    font-size: 22px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+th,
+td {
+    border: 1px solid #bbb;
+    padding: 7px;
+    text-align: left;
+}
+
+th {
+    background: #eee;
+}
+
+.table-responsive {
+    overflow-x: auto;
+}
+
+label {
+    display: block;
+    margin-top: 8px;
+}
+
+input,
+select,
+textarea {
+    width: 100%;
+    max-width: 420px;
+    padding: 6px;
+    margin-top: 4px;
+}
+
+button,
+.btn {
+    display: inline-block;
+    width: auto;
+    margin-top: 10px;
+    padding: 6px 10px;
+    border: 1px solid #777;
+    color: #111;
+    background: #eee;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.risk-pill {
+    display: inline-block;
+    padding: 3px 8px;
+    border: 1px solid #777;
+    color: #111;
+    background: #eee;
+}
+
+.risk-low {
+    background: #d8f0d0;
+}
+
+.risk-medium {
+    background: #fff0b3;
+}
+
+.risk-high {
+    background: #ffd0d0;
+}
+
+.risk-bar-row,
+.club-risk-row {
+    display: grid;
+    grid-template-columns: 90px 1fr 60px;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.risk-bar-track {
+    height: 12px;
+    border: 1px solid #999;
+    background: #fff;
+}
+
+.risk-bar-fill {
+    height: 100%;
+    background: #999;
+}
+
+.risk-blue {
+    background: #8bb6ff;
+}
+
+.text-muted,
+.small {
+    color: #555;
+}
+
+.message {
+    border: 1px solid #999;
+    padding: 8px;
+    background: #f4f4f4;
+}
+
+@media (max-width: 700px) {
+    .metrics-row {
+        grid-template-columns: 1fr;
+    }
+
+    nav a {
+        display: block;
+        margin-bottom: 6px;
+    }
+}

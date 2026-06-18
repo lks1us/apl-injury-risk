@@ -1,0 +1,130 @@
+{% extends "rotations/base.html" %}
+
+{% block title %}Панель риска | APL Injury Risk{% endblock %}
+
+{% block content %}
+<section class="container py-4">
+    <div class="simple-hero">
+        <p class="eyebrow mb-1">Premier League injury risk</p>
+        <h1 class="h2 mb-2">Риск травм игроков АПЛ</h1>
+        <p class="text-muted mb-0">Простая формула: минуты за сезон + травмы в сезоне + травмы за карьеру + дата последней травмы.</p>
+    </div>
+</section>
+
+<section class="container py-3">
+    <div class="row g-3 metrics-row">
+        <div class="col-6 col-lg-3">
+            <div class="metric-card">
+                <span class="metric-label">Игроки</span>
+                <strong>{{ player_count }}</strong>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="metric-card">
+                <span class="metric-label">Клубы</span>
+                <strong>{{ club_count }}</strong>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="metric-card">
+                <span class="metric-label">Средний риск</span>
+                <strong>{{ avg_risk|floatformat:1 }}%</strong>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="metric-card">
+                <span class="metric-label">Высокий риск</span>
+                <strong>{{ high_risk_count }}</strong>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="container py-3">
+    <div class="row g-4">
+        <div class="col-lg-5">
+            <div class="panel">
+                <div class="panel-heading"><h2>Распределение риска</h2></div>
+                <div class="risk-bars">
+                    <div class="risk-bar-row">
+                        <span>Низкий</span>
+                        <div class="risk-bar-track"><div class="risk-bar-fill risk-low" style="width: {{ low_risk_pct }}%;"></div></div>
+                        <strong>{{ low_risk_count }}</strong>
+                    </div>
+                    <div class="risk-bar-row">
+                        <span>Средний</span>
+                        <div class="risk-bar-track"><div class="risk-bar-fill risk-medium" style="width: {{ medium_risk_pct }}%;"></div></div>
+                        <strong>{{ medium_risk_count }}</strong>
+                    </div>
+                    <div class="risk-bar-row">
+                        <span>Высокий</span>
+                        <div class="risk-bar-track"><div class="risk-bar-fill risk-high" style="width: {{ high_risk_pct }}%;"></div></div>
+                        <strong>{{ high_risk_count }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-7">
+            <div class="panel">
+                <div class="panel-heading"><h2>Средний риск по клубам</h2></div>
+                <div class="club-risk-list">
+                    {% for club in club_risk_rows %}
+                        <div class="club-risk-row">
+                            <span>{{ club.short_name }}</span>
+                            <div class="risk-bar-track"><div class="risk-bar-fill risk-blue" style="width: {{ club.avg_risk_width }}%;"></div></div>
+                            <strong>{{ club.avg_risk }}%</strong>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="container py-3">
+    <div class="panel">
+        <div class="panel-heading">
+            <h2>Игроки с наибольшим риском</h2>
+            <a href="{% url 'player_list' %}?sort=risk" class="btn btn-outline-dark btn-sm">Все игроки</a>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                <tr>
+                    <th>Игрок</th>
+                    <th>Клуб</th>
+                    <th>Минуты сезона</th>
+                    <th>Травм в сезоне</th>
+                    <th>Травм за карьеру</th>
+                    <th>Последняя травма</th>
+                    <th>Риск</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for player in top_risk_players %}
+                    <tr>
+                        <td><a href="{{ player.get_absolute_url }}">{{ player.full_name }}</a></td>
+                        <td>{{ player.club.short_name }}</td>
+                        <td>{{ player.season_minutes }}</td>
+                        <td>{{ player.season_injuries }}</td>
+                        <td>{{ player.career_injuries }}</td>
+                        <td>{{ player.last_injury_date|date:"d.m.Y" }}</td>
+                        <td>
+                            {% if player.avg_risk >= 65 %}
+                                <span class="risk-pill risk-high">{{ player.avg_risk|floatformat:1 }}%</span>
+                            {% elif player.avg_risk >= 35 %}
+                                <span class="risk-pill risk-medium">{{ player.avg_risk|floatformat:1 }}%</span>
+                            {% else %}
+                                <span class="risk-pill risk-low">{{ player.avg_risk|floatformat:1 }}%</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="7" class="text-muted">Добавьте оценки риска, чтобы заполнить таблицу.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endblock %}

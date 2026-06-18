@@ -1,0 +1,125 @@
+{% extends "rotations/base.html" %}
+
+{% block title %}Игроки | APL Injury Risk{% endblock %}
+
+{% block content %}
+<section class="container py-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+        <div>
+            <p class="eyebrow mb-1">Squad monitoring</p>
+            <h1 class="h2 mb-0">Игроки</h1>
+        </div>
+        <a class="btn btn-dark" href="{% url 'player_create' %}">Добавить игрока</a>
+    </div>
+
+    <form class="filter-panel row g-3 align-items-end mb-4" method="get">
+        <div class="col-md-4 col-lg-3">
+            <label class="form-label" for="q">Поиск</label>
+            <input class="form-control" id="q" type="search" name="q" value="{{ selected.q }}" placeholder="Игрок, клуб, страна">
+        </div>
+        <div class="col-md-4 col-lg-2">
+            <label class="form-label" for="club">Клуб</label>
+            <select class="form-select" id="club" name="club">
+                <option value="">Все</option>
+                {% for club in clubs %}
+                    <option value="{{ club.pk }}" {% if selected.club == club.pk|stringformat:"s" %}selected{% endif %}>{{ club.short_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-4 col-lg-2">
+            <label class="form-label" for="position">Позиция</label>
+            <select class="form-select" id="position" name="position">
+                <option value="">Все</option>
+                {% for value, label in positions %}
+                    <option value="{{ value }}" {% if selected.position == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-4 col-lg-2">
+            <label class="form-label" for="risk">Риск</label>
+            <select class="form-select" id="risk" name="risk">
+                <option value="">Любой</option>
+                <option value="high" {% if selected.risk == "high" %}selected{% endif %}>Высокий</option>
+                <option value="medium" {% if selected.risk == "medium" %}selected{% endif %}>Средний</option>
+                <option value="low" {% if selected.risk == "low" %}selected{% endif %}>Низкий</option>
+            </select>
+        </div>
+        <div class="col-md-4 col-lg-2">
+            <label class="form-label" for="sort">Сортировка</label>
+            <select class="form-select" id="sort" name="sort">
+                <option value="risk" {% if selected.sort == "risk" %}selected{% endif %}>По риску</option>
+                <option value="minutes" {% if selected.sort == "minutes" %}selected{% endif %}>По минутам</option>
+                <option value="age" {% if selected.sort == "age" %}selected{% endif %}>По возрасту</option>
+                <option value="name" {% if selected.sort == "name" %}selected{% endif %}>По имени</option>
+            </select>
+        </div>
+        <div class="col-md-4 col-lg-1 d-grid">
+            <button class="btn btn-primary" type="submit">OK</button>
+        </div>
+    </form>
+
+    <div class="panel">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                <tr>
+                    <th>Игрок</th>
+                    <th>Клуб</th>
+                    <th>Позиция</th>
+                    <th>Возраст</th>
+                    <th>Минуты сезона</th>
+                    <th>Последняя травма</th>
+                    <th>Травм в сезоне</th>
+                    <th>Травм за карьеру</th>
+                    <th>Риск травмы</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for player in players %}
+                    <tr>
+                        <td>
+                            <a href="{{ player.get_absolute_url }}" class="fw-semibold">{{ player.full_name }}</a>
+                            <div class="small text-muted">{{ player.nationality }}</div>
+                        </td>
+                        <td>{{ player.club.short_name }}</td>
+                        <td>{{ player.get_position_display }}</td>
+                        <td>{{ player.age }}</td>
+                        <td>{{ player.season_minutes }}</td>
+                        <td>{{ player.last_injury_date|date:"d.m.Y" }}</td>
+                        <td>{{ player.season_injuries }}</td>
+                        <td>{{ player.career_injuries }}</td>
+                        <td>
+                            {% if player.avg_risk >= 65 %}
+                                <span class="risk-pill risk-high">{{ player.avg_risk|floatformat:1 }}%</span>
+                            {% elif player.avg_risk >= 35 %}
+                                <span class="risk-pill risk-medium">{{ player.avg_risk|floatformat:1 }}%</span>
+                            {% elif player.avg_risk %}
+                                <span class="risk-pill risk-low">{{ player.avg_risk|floatformat:1 }}%</span>
+                            {% else %}
+                                <span class="text-muted">нет данных</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="9" class="text-muted">По выбранным фильтрам игроков нет.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if is_paginated %}
+        <nav class="mt-4" aria-label="Player pages">
+            <ul class="pagination">
+                {% if page_obj.has_previous %}
+                    <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">Назад</a></li>
+                {% endif %}
+                <li class="page-item active"><span class="page-link">{{ page_obj.number }}</span></li>
+                {% if page_obj.has_next %}
+                    <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">Вперед</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+    {% endif %}
+</section>
+{% endblock %}

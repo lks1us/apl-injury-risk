@@ -1,0 +1,31 @@
+{% extends "rotations/base.html" %}
+
+{% block title %}Клубы | APL Risk Rotation{% endblock %}
+
+{% block content %}
+<section class="container py-4">
+    <p class="eyebrow mb-1">Team overview</p>
+    <h1 class="h2 mb-4">Клубы</h1>
+    <div class="row g-3">
+        {% for club in clubs %}
+            <div class="col-md-6 col-xl-3">
+                <article class="club-card h-100">
+                    <span class="club-code">{{ club.short_name }}</span>
+                    <h2>{{ club.name }}</h2>
+                    <p class="text-muted mb-3">{{ club.city }} · {{ club.stadium }}</p>
+                    <div class="d-flex justify-content-between border-top pt-3">
+                        <span>Игроки</span>
+                        <strong>{{ club.player_count }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>Средний риск</span>
+                        <strong>{{ club.avg_risk|default:0|floatformat:1 }}%</strong>
+                    </div>
+                </article>
+            </div>
+        {% empty %}
+            <div class="col-12 text-muted">Клубы появятся после заполнения данных.</div>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}
