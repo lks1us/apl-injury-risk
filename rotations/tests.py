@@ -5,8 +5,8 @@ from django.test import TestCase
 from django.utils import timezone
 
 from .analytics import assessment_trend, player_risk_projection, training_load_chart
-from .forms import PlayerForm, RotationPlanForm, TrainingLoadForm
-from .models import Club, InjuryAssessment, Player, RotationPlan, TrainingLoad
+from .forms import InjuryUpdateForm, PlayerForm, RotationPlanForm, TrainingLoadForm
+from .models import Club, InjuryAssessment, InjuryRecord, Player, RotationPlan, TrainingLoad
 
 
 class RotationRiskTests(TestCase):
@@ -64,6 +64,37 @@ class RotationRiskTests(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("season_minutes", form.errors)
 
+    def test_player_form_creates_injury_with_zone_and_severity(self):
+        form = PlayerForm(
+            data={
+                "club": self.club.pk,
+                "full_name": "New Player",
+                "position": Player.Position.FORWARD,
+                "season_minutes": 1200,
+                "injury_severity": InjuryRecord.Severity.MODERATE,
+                "injury_body_part": InjuryRecord.BodyPart.HAMSTRING,
+            }
+        )
+        self.assertTrue(form.is_valid())
+        player = form.save()
+        injury = form.create_injury_record(player)
+        self.assertIsNotNone(injury)
+        self.assertEqual(injury.severity, InjuryRecord.Severity.MODERATE)
+        self.assertEqual(injury.body_part, InjuryRecord.BodyPart.HAMSTRING)
+
+    def test_player_form_requires_both_injury_fields(self):
+        form = PlayerForm(
+            data={
+                "club": self.club.pk,
+                "full_name": "Partial Injury",
+                "position": Player.Position.FORWARD,
+                "season_minutes": 900,
+                "injury_severity": InjuryRecord.Severity.MINOR,
+            }
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("injury_body_part", form.errors)
+
     def test_training_load_form_rejects_future_date(self):
         form = TrainingLoadForm(
             data={
@@ -96,6 +127,20 @@ class RotationRiskTests(TestCase):
 
         self.assertFalse(form.is_valid())
         self.assertIn("__all__", form.errors)
+
+    def test_injury_update_form_saves_record(self):
+        form = InjuryUpdateForm(
+            data={
+                "injury_date": (timezone.localdate() - timedelta(days=5)).isoformat(),
+                "body_part": InjuryRecord.BodyPart.KNEE,
+                "severity": InjuryRecord.Severity.SEVERE,
+            }
+        )
+        self.assertTrue(form.is_valid())
+        injury = form.save_for_player(self.player)
+        self.player.refresh_from_db()
+        self.assertEqual(injury.body_part, InjuryRecord.BodyPart.KNEE)
+        self.assertEqual(self.player.last_injury_date, injury.injury_date)
 
     def test_analytics_returns_projection_and_chart_data(self):
         TrainingLoad.objects.create(

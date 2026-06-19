@@ -1,148 +1,175 @@
 # APL Injury Risk
 
-Система прогнозирования риска травматизма игроков Английской Премьер-лиги. Проект намеренно упрощен: риск считается по двум понятным показателям — минуты за последние пять матчей и количество предыдущих травм.
+Веб-сервис для оценки **риска травмы** игроков **Английской Премьер-лиги**.  
+Система объединяет данные из открытых источников, рассчитывает риск по нескольким факторам и показывает последнюю травму каждого игрока.
 
-## Функциональность
+| | |
+|---|---|
+| **Сайт** | https://l1ksius.pythonanywhere.com |
+| **Репозиторий** | https://github.com/lks1us/apl-injury-risk |
+| **Стек** | Python 3.10+, Django 5, SQLite, Pandas |
 
-- панель с метриками риска, распределением оценок и графиками;
-- каталог игроков с поиском, фильтрами, сортировкой и ORM-агрегациями;
-- карточка игрока с динамикой риска и историей оценок;
-- формы добавления игроков, нагрузок и медицинских оценок;
-- автоматический расчет `risk_score` и `risk_level`;
-- аналитика на Pandas: скользящее среднее риска и подготовка данных для графиков;
-- Django Admin для всех моделей;
-- seed-команда для демонстрационных данных;
-- unit-тесты для логики риска, форм и аналитики.
+---
 
-## Стек
+## Назначение проекта
 
-- Python 3.10+
-- Django 5
-- SQLite
-- Pandas
-- Bootstrap 5
-- Chart.js
+Тренерский и медицинский штаб клуба должен быстро понимать, у кого из игроков повышен риск новой травмы.  
+Сервис решает эту задачу: собирает актуальную базу игроков АПЛ, подтягивает травмы с Transfermarkt, считает интегральный **risk score** (0–100%) и показывает результат в простом русскоязычном интерфейсе.
 
-## Модели данных
+---
 
-- `Club` — клуб АПЛ.
-- `Player` — игрок клуба.
-- `TrainingLoad` — нагрузка игрока.
-- `InjuryAssessment` — медицинская оценка с автоматическим расчетом риска.
-- `RotationPlan` — вспомогательная связанная модель, оставленная в архитектуре проекта.
+## Основные функции
 
-## Формула риска
+### Главная страница
+- количество игроков и клубов в базе;
+- средний риск травмы;
+- распределение игроков по уровням риска (низкий / средний / высокий);
+- таблица игроков с наибольшим риском;
+- описание формулы расчёта риска.
 
-```text
-risk_score = min(100, minutes_component + season_injury_component + career_injury_component + recency_component)
-```
+### Список игроков
+- **841 игрок** из 20 клубов АПЛ;
+- поиск по имени и клубу;
+- фильтр по уровню риска;
+- позиции на **русском языке** (вратарь, защитник, полузащитник, нападающий).
 
-Где:
+### Карточка игрока
+- риск травмы в процентах;
+- минуты за сезон;
+- статистика травм;
+- блок **«Последняя травма»** (зона, тяжесть, дата, источник Transfermarkt);
+- кнопка **«Обновить последнюю травму»**.
 
-- `minutes_component = min(45, season_minutes / 3420 * 45)` — нагрузка текущего сезона;
-- `season_injury_component = min(30, season_injuries * 10)` — травмы в текущем сезоне;
-- `career_injury_component = min(20, career_injuries * 3)` — травмы за карьеру;
-- `recency_component` — от 0 до 5 в зависимости от давности последней травмы.
+### Добавление игрока
+- ручной ввод игрока с указанием зоны и тяжести травмы.
 
-Уровни риска: `low` (< 35), `medium` (35–64), `high` (≥ 65).
+### Админ-панель Django
+- полное управление клубами, игроками, травмами и оценками риска: `/admin/`.
 
-Подробная схема и сценарии описаны в [TZ.md](TZ.md).
+---
 
-## Локальный запуск
+## Источники данных
 
-```bash
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-set DJANGO_DEBUG=True
-set DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost
-python manage.py migrate
-python manage.py seed_demo
-python manage.py createsuperuser
-python manage.py runserver
-```
+| Источник | Что загружается |
+|----------|-----------------|
+| **Fantasy Premier League API** | клубы, игроки, позиции, минуты за сезон |
+| **Transfermarkt** | последняя травма: тип, дата, зона, тяжесть, дни пропуска |
 
-После запуска:
+Обновление выполняется командами Django (см. раздел «Запуск»).
 
-- сайт: `http://127.0.0.1:8000/`
-- админка: `http://127.0.0.1:8000/admin/`
+---
 
-Для macOS/Linux переменные окружения задаются так:
+## Модель расчёта риска
 
-```bash
-export DJANGO_DEBUG=True
-export DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost
-```
+Риск считается модулем `rotations/risk_engine.py` на основе:
 
-## Тесты
+1. нагрузки за сезон и за последние 5 матчей;
+2. травм в текущем сезоне и за карьеру;
+3. давности последней травмы (экспоненциальный спад);
+4. текущей недоступности игрока;
+5. тяжести активной травмы;
+6. корректировки по **возрасту** и **позиции**.
 
-```bash
-python manage.py test
-```
+**Уровни риска:**
 
-## Демо-данные
+| Баллы | Уровень |
+|-------|---------|
+| 0–34  | Низкий |
+| 35–64 | Средний |
+| ≥ 65  | Высокий |
 
-Команда ниже очищает данные приложения и создает 20 клубов, 100 игроков, записи нагрузок и медицинские оценки риска:
+Подробная спецификация — в [TZ.md](TZ.md).
 
-```bash
-python manage.py seed_demo
-```
+---
 
-Данные демонстрационные и нужны для защиты проекта, графиков и проверки сценариев.
+## Скриншоты интерфейса
 
-## Настройка для PythonAnywhere
+### Главная страница
 
-1. Загрузить проект в публичный GitHub-репозиторий.
-2. На PythonAnywhere открыть Bash-консоль и клонировать репозиторий.
-3. Создать virtualenv и установить зависимости:
+![Главная страница](docs/screenshots/dashboard.png)
 
-```bash
-mkvirtualenv --python=/usr/bin/python3.10 apl-risk
-pip install -r requirements.txt
-```
+### Список игроков
 
-4. Указать переменные окружения в WSGI-файле или через настройки окружения:
-
-```python
-import os
-os.environ["DJANGO_SECRET_KEY"] = "your-production-secret"
-os.environ["DJANGO_DEBUG"] = "False"
-os.environ["DJANGO_ALLOWED_HOSTS"] = "yourusername.pythonanywhere.com"
-```
-
-5. Выполнить миграции и заполнить демо-данные:
-
-```bash
-python manage.py migrate
-python manage.py seed_demo
-python manage.py collectstatic
-```
-
-6. В настройках Web App указать:
-
-- Source code: путь к проекту;
-- Working directory: путь к проекту;
-- WSGI file: импорт `apl_risk.wsgi.application`;
-- Static files: URL `/static/`, directory `staticfiles`.
-
-## Скриншоты
-
-### Главная панель
-
-![Главная панель](docs/screenshots/dashboard.png)
+![Список игроков](docs/screenshots/player-list.png)
 
 ### Карточка игрока
 
 ![Карточка игрока](docs/screenshots/player-detail.png)
 
-## Культура репозитория
+---
 
-В репозиторий не нужно добавлять `venv`, `__pycache__`, `.idea`, `.vscode`, локальную БД `db.sqlite3` и собранную папку `staticfiles`. Они уже перечислены в `.gitignore`.
+## Запуск на локальном компьютере
 
-Для защиты важно сделать регулярные осмысленные коммиты, например:
+```bash
+git clone https://github.com/lks1us/apl-injury-risk.git
+cd apl-injury-risk
+python -m venv venv
+venv\Scripts\activate          # Windows
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py sync_apl_data --force
+python manage.py sync_transfermarkt_injuries --force
+python manage.py runserver
+```
 
-- `Add Django project structure`
-- `Implement injury risk models`
-- `Add player filters and analytics dashboard`
-- `Create demo seed command`
-- `Document deployment steps`
+Сайт: http://127.0.0.1:8000/
+
+> Полная синхронизация Transfermarkt занимает 30–50 минут из‑за ограничений внешнего API.
+
+---
+
+## Развёртывание на PythonAnywhere
+
+Подробная инструкция: [deploy/PYTHONANYWHERE.md](deploy/PYTHONANYWHERE.md)
+
+**Кратко:**
+
+1. Зарегистрироваться на https://www.pythonanywhere.com  
+2. Клонировать репозиторий в домашнюю директорию  
+3. Создать virtualenv, установить зависимости  
+4. Выполнить `migrate`, синхронизацию данных, `collectstatic`  
+5. Настроить WSGI и статические файлы  
+6. Нажать **Reload** на вкладке Web  
+
+**Рабочий сайт:** https://l1ksius.pythonanywhere.com
+
+Автоматическое обновление через скрипт (при наличии API-токена):
+
+```powershell
+$env:PYTHONANYWHERE_API_TOKEN = "ваш-токен"
+python deploy/deploy_all.py
+```
+
+---
+
+## Структура проекта
+
+```text
+apl-injury-risk/
+├── apl_risk/           # настройки Django
+├── rotations/          # основное приложение
+│   ├── models.py       # модели БД
+│   ├── risk_engine.py  # расчёт риска
+│   ├── services/       # синхронизация FPL и Transfermarkt
+│   ├── templates/      # HTML-шаблоны
+│   └── management/     # команды sync_apl_data, sync_transfermarkt_injuries
+├── deploy/             # деплой на PythonAnywhere
+├── docs/screenshots/   # скриншоты для README
+├── README.md           # описание проекта (этот файл)
+├── TZ.md               # техническое задание
+└── requirements.txt
+```
+
+---
+
+## Тестирование
+
+```bash
+python manage.py test
+```
+
+---
+
+## Автор
+
+Учебный проект — **APL Injury Risk**, 2026.

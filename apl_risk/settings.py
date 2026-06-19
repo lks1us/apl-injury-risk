@@ -96,5 +96,27 @@ STATICFILES_DIRS = []
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+FPL_API_URL = os.environ.get(
+    "FPL_API_URL",
+    "https://fantasy.premierleague.com/api/bootstrap-static/",
+)
+FPL_SYNC_INTERVAL_HOURS = int(os.environ.get("FPL_SYNC_INTERVAL_HOURS", "12"))
+FPL_SYNC_LOCK_SECONDS = int(os.environ.get("FPL_SYNC_LOCK_SECONDS", "600"))
+FPL_API_TIMEOUT = int(os.environ.get("FPL_API_TIMEOUT", "30"))
+
+TRANSFERMARKT_SEASON_ID = int(os.environ.get("TRANSFERMARKT_SEASON_ID", "2024"))
+TRANSFERMARKT_REQUEST_DELAY = float(os.environ.get("TRANSFERMARKT_REQUEST_DELAY", "0.35"))
+TRANSFERMARKT_TIMEOUT = int(os.environ.get("TRANSFERMARKT_TIMEOUT", "30"))
+TRANSFERMARKT_AUTO_BATCH_SIZE = int(os.environ.get("TRANSFERMARKT_AUTO_BATCH_SIZE", "0"))
+TRANSFERMARKT_SYNC_BATCH_SIZE = int(os.environ.get("TRANSFERMARKT_SYNC_BATCH_SIZE", "9999"))
+TRANSFERMARKT_SYNC_LOCK_SECONDS = int(os.environ.get("TRANSFERMARKT_SYNC_LOCK_SECONDS", "3600"))
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "apl-injury-risk",
+    }
+}
+
 LOGIN_REDIRECT_URL = "dashboard"
 LOGOUT_REDIRECT_URL = "dashboard"

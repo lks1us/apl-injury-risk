@@ -1,64 +1,54 @@
 {% extends "rotations/base.html" %}
 
-{% block title %}{{ player.full_name }} | APL Injury Risk{% endblock %}
+{% block title %}{{ player.full_name }} | Риск травм АПЛ{% endblock %}
 
 {% block content %}
-<section class="container">
-    <h2>{{ player.full_name }}</h2>
-    <p>{{ player.club.name }} | {{ player.get_position_display }} | {{ player.age }} лет | {{ player.nationality }}</p>
-    <p><a class="btn" href="{% url 'assessment_create' player.pk %}">Обновить риск</a></p>
-</section>
+<p><a href="{% url 'player_list' %}">← К списку игроков</a></p>
 
-<section class="container">
-    <div class="metrics-row">
-        <div class="metric-card">
-            <span class="metric-label">Риск травмы</span>
-            <strong>{{ risk_projection.projected_score }}%</strong>
-        </div>
-        <div class="metric-card">
-            <span class="metric-label">Минуты сезона</span>
-            <strong>{{ player.season_minutes }}</strong>
-        </div>
-        <div class="metric-card">
-            <span class="metric-label">Последняя травма</span>
-            <strong>{{ player.last_injury_date|date:"d.m.Y" }}</strong>
-        </div>
-        <div class="metric-card">
-            <span class="metric-label">Травмы сезон / карьера</span>
-            <strong>{{ player.season_injuries }} / {{ player.career_injuries }}</strong>
-        </div>
-    </div>
-</section>
+<h1 class="page-title">{{ player.full_name }}</h1>
+<p class="page-desc">
+    {{ player.club.name }} · {{ player.get_position_display }} · {{ player.age }} лет
+</p>
 
-<section class="container">
-    <div class="panel">
-        <h2>История оценок</h2>
-        <table>
-            <thead>
-            <tr>
-                <th>Дата</th>
-                <th>Минуты сезона</th>
-                <th>Последняя травма</th>
-                <th>Травм в сезоне</th>
-                <th>Травм за карьеру</th>
-                <th>Риск</th>
-            </tr>
-            </thead>
-            <tbody>
-            {% for assessment in assessments %}
-                <tr>
-                    <td>{{ assessment.date|date:"d.m.Y" }}</td>
-                    <td>{{ player.season_minutes }}</td>
-                    <td>{{ player.last_injury_date|date:"d.m.Y" }}</td>
-                    <td>{{ player.season_injuries }}</td>
-                    <td>{{ player.career_injuries }}</td>
-                    <td><span class="risk-pill risk-{{ assessment.risk_level }}">{{ assessment.risk_score }}%</span></td>
-                </tr>
-            {% empty %}
-                <tr><td colspan="6">Оценок риска пока нет.</td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
+<div class="metrics">
+    <div class="metric">
+        <span>Риск травмы</span>
+        <strong>{{ risk_projection.projected_score }}%</strong>
     </div>
-</section>
+    <div class="metric">
+        <span>Минуты сезона</span>
+        <strong>{{ player.season_minutes }}</strong>
+    </div>
+    <div class="metric">
+        <span>Травмы сезон / карьера</span>
+        <strong>{{ player.season_injuries }} / {{ player.career_injuries }}</strong>
+    </div>
+    <div class="metric">
+        <span>Последняя травма</span>
+        <strong>{% if player.last_injury_date %}{{ player.last_injury_date|date:"d.m.Y" }}{% else %}—{% endif %}</strong>
+    </div>
+</div>
+
+<div class="panel">
+    <h2>Последняя травма</h2>
+    {% if latest_injury %}
+        {% if latest_injury.injury_type == "Нет зарегистрированных травм" %}
+        <div class="injury-item">
+            {{ latest_injury.injury_type }}
+            <span style="color:#6b7280;font-size:0.85rem;"> · Transfermarkt</span>
+        </div>
+        {% else %}
+        <div class="injury-item">
+            <strong>{{ latest_injury.get_body_part_display }}</strong> — {{ latest_injury.get_severity_display }}
+            · {{ latest_injury.injury_date|date:"d.m.Y" }}
+            <span style="color:#6b7280;font-size:0.85rem;"> · Transfermarkt</span>
+        </div>
+        {% endif %}
+    {% else %}
+    <p style="color: #6b7280;">Записей о травмах нет.</p>
+    {% endif %}
+    <p style="margin-top: 0.75rem;">
+        <a class="btn" href="{% url 'injury_update' player.pk %}">Обновить последнюю травму</a>
+    </p>
+</div>
 {% endblock %}

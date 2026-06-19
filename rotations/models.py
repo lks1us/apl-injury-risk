@@ -5,6 +5,12 @@ from django.utils import timezone
 
 
 class Club(models.Model):
+    external_id = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        unique=True,
+        help_text="ID from external football API (FPL).",
+    )
     name = models.CharField("club name", max_length=120, unique=True)
     short_name = models.CharField("short name", max_length=12, unique=True)
     city = models.CharField(max_length=80)
@@ -24,15 +30,37 @@ class Club(models.Model):
 
 class Player(models.Model):
     class Position(models.TextChoices):
-        GOALKEEPER = "GK", "Goalkeeper"
-        DEFENDER = "DF", "Defender"
-        MIDFIELDER = "MF", "Midfielder"
-        FORWARD = "FW", "Forward"
+        GOALKEEPER = "GK", "Вратарь"
+        DEFENDER = "DF", "Защитник"
+        MIDFIELDER = "MF", "Полузащитник"
+        FORWARD = "FW", "Нападающий"
+
+    class DataSource(models.TextChoices):
+        MANUAL = "manual", "Manual"
+        FPL = "fpl", "Fantasy Premier League"
 
     club = models.ForeignKey(
         Club,
         on_delete=models.CASCADE,
         related_name="players",
+    )
+    external_id = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        unique=True,
+        help_text="ID from external football API (FPL).",
+    )
+    data_source = models.CharField(
+        max_length=20,
+        choices=DataSource.choices,
+        blank=True,
+        default="",
+    )
+    last_synced_at = models.DateTimeField(null=True, blank=True)
+    transfermarkt_id = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Player ID on Transfermarkt.",
     )
     full_name = models.CharField(max_length=120)
     position = models.CharField(max_length=2, choices=Position.choices)
@@ -150,9 +178,9 @@ class TrainingLoad(models.Model):
 
 class InjuryAssessment(models.Model):
     class RiskLevel(models.TextChoices):
-        LOW = "low", "Low"
-        MEDIUM = "medium", "Medium"
-        HIGH = "high", "High"
+        LOW = "low", "Низкий"
+        MEDIUM = "medium", "Средний"
+        HIGH = "high", "Высокий"
 
     player = models.ForeignKey(
         Player,
@@ -160,6 +188,26 @@ class InjuryAssessment(models.Model):
         related_name="assessments",
     )
     date = models.DateField()
+    season_minutes_at_assessment = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Player season minutes at the time of this assessment.",
+    )
+    last_injury_date_at_assessment = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Player last injury date at the time of this assessment.",
+    )
+    season_injuries_at_assessment = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Player season injuries at the time of this assessment.",
+    )
+    career_injuries_at_assessment = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Player career injuries at the time of this assessment.",
+    )
     muscle_fatigue = models.PositiveSmallIntegerField(
         validators=[MinValueValidator(0), MaxValueValidator(100)]
     )
@@ -189,25 +237,18 @@ class InjuryAssessment(models.Model):
         return f"{self.player.full_name}: {self.risk_score}%"
 
     def calculate_risk_score(self):
-        minutes_component = min(45, self.player.season_minutes / 3420 * 45)
-        season_injury_component = min(30, self.player.season_injuries * 10)
-        career_injury_component = min(20, self.player.career_injuries * 3)
-        recency_component = 0
-        if self.player.last_injury_date:
-            days_since_injury = (timezone.localdate() - self.player.last_injury_date).days
-            if days_since_injury <= 30:
-                recency_component = 5
-            elif days_since_injury <= 90:
-                recency_component = 3
-            elif days_since_injury <= 180:
-                recency_component = 1
-        weighted_score = (
-            minutes_component
-            + season_injury_component
-            + career_injury_component
-            + recency_component
+        from .risk_engine import calculate_player_risk
+
+        result = calculate_player_risk(
+            self.player,
+            on_date=self.date,
+            season_minutes=self.season_minutes_at_assessment,
+            season_injuries=self.season_injuries_at_assessment,
+            career_injuries=self.career_injuries_at_assessment,
+            last_injury_date=self.last_injury_date_at_assessment,
+            assessment=self,
         )
-        return round(max(0, min(100, weighted_score)), 2)
+        return result["total"]
 
     @staticmethod
     def level_for_score(score):
@@ -218,9 +259,88 @@ class InjuryAssessment(models.Model):
         return InjuryAssessment.RiskLevel.LOW
 
     def save(self, *args, **kwargs):
+        if self._state.adding:
+            if self.season_minutes_at_assessment is None:
+                self.season_minutes_at_assessment = self.player.season_minutes
+            if self.last_injury_date_at_assessment is None:
+                self.last_injury_date_at_assessment = self.player.last_injury_date
+            if self.season_injuries_at_assessment is None:
+                self.season_injuries_at_assessment = self.player.season_injuries
+            if self.career_injuries_at_assessment is None:
+                self.career_injuries_at_assessment = self.player.career_injuries
         self.risk_score = self.calculate_risk_score()
         self.risk_level = self.level_for_score(self.risk_score)
         super().save(*args, **kwargs)
+
+
+class InjuryRecord(models.Model):
+    class BodyPart(models.TextChoices):
+        KNEE = "knee", "Колено"
+        HAMSTRING = "hamstring", "Задняя поверхность бедра"
+        ANKLE = "ankle", "Голеностоп"
+        GROIN = "groin", "Пах"
+        CALF = "calf", "Икра"
+        SHOULDER = "shoulder", "Плечо"
+        BACK = "back", "Спина"
+        HEAD = "head", "Голова"
+        OTHER = "other", "Другое"
+
+    class Severity(models.TextChoices):
+        MINOR = "minor", "Лёгкая"
+        MODERATE = "moderate", "Средняя"
+        SEVERE = "severe", "Тяжёлая"
+
+    player = models.ForeignKey(
+        Player,
+        on_delete=models.CASCADE,
+        related_name="injury_records",
+    )
+    injury_date = models.DateField()
+    body_part = models.CharField(max_length=20, choices=BodyPart.choices)
+    injury_type = models.CharField(max_length=80)
+    severity = models.CharField(max_length=10, choices=Severity.choices)
+    days_out = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(0), MaxValueValidator(365)],
+    )
+    matches_missed = models.PositiveSmallIntegerField(
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(50)],
+    )
+    recovery_date = models.DateField(null=True, blank=True)
+    treatment = models.CharField(max_length=120, blank=True)
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-injury_date"]
+
+    def __str__(self):
+        return f"{self.player.full_name}: {self.get_body_part_display()} ({self.injury_date})"
+
+    @property
+    def is_recovered(self):
+        if self.recovery_date:
+            return self.recovery_date <= timezone.localdate()
+        return self.days_out == 0
+
+
+class DataSyncLog(models.Model):
+    class Status(models.TextChoices):
+        SUCCESS = "success", "Success"
+        FAILED = "failed", "Failed"
+
+    source = models.CharField(max_length=40, default="fpl")
+    synced_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=10, choices=Status.choices)
+    players_synced = models.PositiveIntegerField(default=0)
+    clubs_synced = models.PositiveIntegerField(default=0)
+    message = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-synced_at"]
+
+    def __str__(self):
+        return f"{self.source} @ {self.synced_at:%Y-%m-%d %H:%M}"
 
 
 class RotationPlan(models.Model):

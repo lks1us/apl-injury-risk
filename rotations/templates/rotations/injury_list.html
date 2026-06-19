@@ -1,0 +1,91 @@
+{% extends "rotations/base.html" %}
+
+{% block title %}Травмы | APL Injury Risk{% endblock %}
+
+{% block content %}
+<section class="page-hero">
+    <p class="eyebrow">Medical registry</p>
+    <h1>Реестр травм</h1>
+    <p>Полная история повреждений: зона, тип, тяжесть, пропущенные дни и матчи.</p>
+</section>
+
+<form class="filter-panel" method="get">
+    <div>
+        <label for="club">Клуб</label>
+        <select id="club" name="club">
+            <option value="">Все</option>
+            {% for club in clubs %}
+            <option value="{{ club.pk }}" {% if selected.club == club.pk|stringformat:"s" %}selected{% endif %}>{{ club.short_name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="body_part">Зона тела</label>
+        <select id="body_part" name="body_part">
+            <option value="">Все</option>
+            {% for value, label in body_parts %}
+            <option value="{{ value }}" {% if selected.body_part == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="severity">Тяжесть</label>
+        <select id="severity" name="severity">
+            <option value="">Любая</option>
+            {% for value, label in severities %}
+            <option value="{{ value }}" {% if selected.severity == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div><button class="btn" type="submit" style="width:100%;">Фильтр</button></div>
+</form>
+
+<div class="panel">
+    <div class="table-responsive">
+        <table>
+            <thead>
+            <tr>
+                <th>Дата</th>
+                <th>Игрок</th>
+                <th>Клуб</th>
+                <th>Зона</th>
+                <th>Тип</th>
+                <th>Тяжесть</th>
+                <th class="num">Дней</th>
+                <th class="center">Матчи</th>
+                <th>Лечение</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for injury in injuries %}
+            <tr>
+                <td>{{ injury.injury_date|date:"d.m.Y" }}</td>
+                <td><a href="{{ injury.player.get_absolute_url }}">{{ injury.player.full_name }}</a></td>
+                <td>{{ injury.player.club.short_name }}</td>
+                <td>{{ injury.get_body_part_display }}</td>
+                <td>{{ injury.injury_type }}</td>
+                <td><span class="severity-pill severity-{{ injury.severity }}">{{ injury.get_severity_display }}</span></td>
+                <td class="num">{{ injury.days_out }}</td>
+                <td class="center">{{ injury.matches_missed }}</td>
+                <td>{{ injury.treatment|default:"—" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="9">Записей о травмах нет.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if is_paginated %}
+<nav><ul class="pagination">
+    {% if page_obj.has_previous %}
+    <li><a class="page-link" href="?page={{ page_obj.previous_page_number }}">Назад</a></li>
+    {% endif %}
+    <li class="page-item active"><span class="page-link">{{ page_obj.number }}</span></li>
+    {% if page_obj.has_next %}
+    <li><a class="page-link" href="?page={{ page_obj.next_page_number }}">Вперёд</a></li>
+    {% endif %}
+</ul></nav>
+{% endif %}
+{% endblock %}

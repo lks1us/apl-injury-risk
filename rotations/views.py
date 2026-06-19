@@ -12,9 +12,18 @@ from .analytics import (
     dashboard_summary,
     filtered_players,
     player_risk_projection,
+    training_load_chart,
 )
-from .forms import InjuryAssessmentForm, PlayerForm, RotationPlanForm, TrainingLoadForm
-from .models import Club, InjuryAssessment, Player, RotationPlan
+from .forms import (
+    InjuryAssessmentForm,
+    InjuryUpdateForm,
+    PlayerForm,
+    RotationPlanForm,
+    TrainingLoadForm,
+)
+from .models import Club, InjuryAssessment, InjuryRecord, Player, RotationPlan
+from .models import DataSyncLog
+from .services.fpl_sync import latest_sync_log
 
 
 class DashboardView(TemplateView):
@@ -24,15 +33,8 @@ class DashboardView(TemplateView):
         context = super().get_context_data(**kwargs)
         summary = dashboard_summary()
         context.update(summary)
-        context["risk_distribution_json"] = json.dumps(
-            [
-                summary["risk_distribution"].get("low", 0),
-                summary["risk_distribution"].get("medium", 0),
-                summary["risk_distribution"].get("high", 0),
-            ]
-        )
-        context["club_labels_json"] = json.dumps(summary["club_labels"])
-        context["club_risks_json"] = json.dumps(summary["club_risks"])
+        context["sync_log"] = latest_sync_log()
+        context["tm_sync_log"] = DataSyncLog.objects.filter(source="transfermarkt").first()
         return context
 
 
@@ -40,7 +42,7 @@ class PlayerListView(ListView):
     model = Player
     template_name = "rotations/player_list.html"
     context_object_name = "players"
-    paginate_by = 12
+    paginate_by = 24
 
     def get_queryset(self):
         return filtered_players(self.request.GET)
@@ -64,16 +66,40 @@ class PlayerDetailView(DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         player = self.object
-        risk_projection = player_risk_projection(player)
-        trend = assessment_trend(player)
         context.update(
             {
-                "risk_projection": risk_projection,
-                "latest_assessment": player.latest_assessment,
-                "trend_json": json.dumps(trend),
-                "assessments": player.assessments.all()[:8],
+                "risk_projection": player_risk_projection(player),
+                "latest_injury": player.injury_records.order_by("-injury_date", "-pk").first(),
             }
         )
+        return context
+
+
+class InjuryListView(ListView):
+    model = InjuryRecord
+    template_name = "rotations/injury_list.html"
+    context_object_name = "injuries"
+    paginate_by = 15
+
+    def get_queryset(self):
+        queryset = InjuryRecord.objects.select_related("player", "player__club")
+        severity = self.request.GET.get("severity")
+        body_part = self.request.GET.get("body_part")
+        club = self.request.GET.get("club")
+        if severity:
+            queryset = queryset.filter(severity=severity)
+        if body_part:
+            queryset = queryset.filter(body_part=body_part)
+        if club:
+            queryset = queryset.filter(player__club_id=club)
+        return queryset.order_by("-injury_date")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["clubs"] = Club.objects.all()
+        context["severities"] = InjuryRecord.Severity.choices
+        context["body_parts"] = InjuryRecord.BodyPart.choices
+        context["selected"] = self.request.GET
         return context
 
 
@@ -86,6 +112,7 @@ class ClubListView(ListView):
         return Club.objects.annotate(
             player_count=Count("players"),
             avg_risk=Avg("players__assessments__risk_score"),
+            injury_count=Count("players__injury_records"),
         ).order_by("name")
 
 
@@ -113,6 +140,7 @@ def player_create(request):
     form = PlayerForm(request.POST or None)
     if form.is_valid():
         player = form.save()
+        form.create_injury_record(player)
         InjuryAssessment.objects.create(
             player=player,
             date=timezone.localdate(),
@@ -120,11 +148,11 @@ def player_create(request):
             joint_stability=100,
             previous_injury_factor=player.career_injuries,
             recovery_score=100,
-            notes="Initial automatic risk assessment.",
+            notes="Первичная автоматическая оценка риска.",
         )
-        messages.success(request, "Player profile has been created.")
+        messages.success(request, "Профиль игрока создан.")
         return redirect(player)
-    return render(request, "rotations/form.html", {"form": form, "title": "Add player"})
+    return render(request, "rotations/form.html", {"form": form, "title": "Добавить игрока"})
 
 
 def training_load_create(request, pk):
@@ -134,12 +162,36 @@ def training_load_create(request, pk):
         training_load = form.save(commit=False)
         training_load.player = player
         training_load.save()
-        messages.success(request, "Training load has been saved.")
+        messages.success(request, "Запись нагрузки сохранена.")
         return redirect(player)
     return render(
         request,
         "rotations/form.html",
-        {"form": form, "title": f"Add load: {player.full_name}", "player": player},
+        {"form": form, "title": f"Добавить нагрузку: {player.full_name}", "player": player},
+    )
+
+
+def injury_update(request, pk):
+    player = get_object_or_404(Player, pk=pk)
+    latest = player.injury_records.order_by("-injury_date", "-pk").first()
+    form = InjuryUpdateForm(request.POST or None, instance=latest)
+    if form.is_valid():
+        form.save_for_player(player)
+        InjuryAssessment.objects.create(
+            player=player,
+            date=timezone.localdate(),
+            muscle_fatigue=0,
+            joint_stability=100,
+            previous_injury_factor=player.career_injuries,
+            recovery_score=100,
+            notes="Пересчёт риска после обновления травмы.",
+        )
+        messages.success(request, "Данные о травме обновлены.")
+        return redirect(player)
+    return render(
+        request,
+        "rotations/form.html",
+        {"form": form, "title": f"Обновить последнюю травму: {player.full_name}", "player": player},
     )
 
 
@@ -154,12 +206,12 @@ def assessment_create(request, pk):
         assessment.previous_injury_factor = player.career_injuries
         assessment.recovery_score = 100
         assessment.save()
-        messages.success(request, "Risk assessment has been calculated.")
+        messages.success(request, "Оценка риска рассчитана.")
         return redirect(player)
     return render(
         request,
         "rotations/form.html",
-        {"form": form, "title": f"Add assessment: {player.full_name}", "player": player},
+        {"form": form, "title": f"Новая оценка: {player.full_name}", "player": player},
     )
 
 
@@ -175,8 +227,8 @@ def rotation_plan_create(request, pk):
             "planned_minutes": projection["planned_minutes"],
             "recommendation": projection["recommendation"],
             "rationale": (
-                f"Projected risk {projection['projected_score']}%, "
-                f"average load {projection['avg_load']}, sleep {projection['avg_sleep']}h."
+                f"Прогноз риска {projection['projected_score']}%, "
+                f"средняя нагрузка {projection['avg_load']}, сон {projection['avg_sleep']} ч."
             ),
         }
     )
@@ -185,10 +237,10 @@ def rotation_plan_create(request, pk):
         plan = form.save(commit=False)
         plan.player = player
         plan.save()
-        messages.success(request, "Rotation plan has been created.")
+        messages.success(request, "План ротации создан.")
         return redirect(reverse("rotation_board"))
     return render(
         request,
         "rotations/form.html",
-        {"form": form, "title": f"Plan rotation: {player.full_name}", "player": player},
+        {"form": form, "title": f"План ротации: {player.full_name}", "player": player},
     )

@@ -4,7 +4,7 @@ from decimal import Decimal
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from rotations.models import Club, InjuryAssessment, Player, RotationPlan, TrainingLoad
+from rotations.models import Club, InjuryAssessment, InjuryRecord, Player, RotationPlan, TrainingLoad
 
 
 class Command(BaseCommand):
@@ -13,6 +13,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         RotationPlan.objects.all().delete()
         InjuryAssessment.objects.all().delete()
+        InjuryRecord.objects.all().delete()
         TrainingLoad.objects.all().delete()
         Player.objects.all().delete()
         Club.objects.all().delete()
@@ -305,17 +306,74 @@ class Command(BaseCommand):
 
             for assessment_index, days_ago in enumerate([20, 10, 1]):
                 fatigue = max(20, min(98, 35 + history // 2 + assessment_index * 10 + index % 7))
+                assessment_date = today - timedelta(days=days_ago)
+                snapshot_minutes = max(
+                    120,
+                    min(3600, season_minutes - assessment_index * 220 - index * 11),
+                )
+                snapshot_season_injuries = max(0, season_injuries - assessment_index)
+                snapshot_career_injuries = max(0, career_injuries - assessment_index // 2)
+                snapshot_last_injury = assessment_date - timedelta(days=90 + index * 5 + assessment_index * 40)
                 InjuryAssessment.objects.create(
                     player=player,
-                    date=today - timedelta(days=days_ago),
+                    date=assessment_date,
+                    season_minutes_at_assessment=snapshot_minutes,
+                    last_injury_date_at_assessment=snapshot_last_injury,
+                    season_injuries_at_assessment=snapshot_season_injuries,
+                    career_injuries_at_assessment=snapshot_career_injuries,
                     muscle_fatigue=fatigue,
                     joint_stability=max(25, min(94, 88 - history // 2 - assessment_index * 7)),
-                    previous_injury_factor=career_injuries,
+                    previous_injury_factor=snapshot_career_injuries,
                     recovery_score=max(25, min(95, 86 - history // 2 - assessment_index * 6)),
                     notes="Risk is calculated from season minutes, last injury date, season injuries and career injuries.",
                 )
 
         opponents = ["Chelsea", "Newcastle United", "Aston Villa", "Brighton"]
+        body_parts = [choice[0] for choice in InjuryRecord.BodyPart.choices]
+        injury_types = [
+            "Мышечное напряжение",
+            "Разрыв связок",
+            "Растяжение",
+            "Ушиб",
+            "Перелом",
+            "Воспаление сухожилия",
+            "Травма мениска",
+        ]
+        treatments = [
+            "Физиотерапия и восстановление",
+            "Лед, покой, компрессия",
+            "Индивидальная программа реабилитации",
+            "Работа с медицинским штабом",
+            "Контроль нагрузки на тренировках",
+        ]
+        severities = [
+            InjuryRecord.Severity.MINOR,
+            InjuryRecord.Severity.MODERATE,
+            InjuryRecord.Severity.SEVERE,
+        ]
+
+        for index, player in enumerate(players):
+            injury_total = max(1, min(player.career_injuries, 2))
+            for injury_index in range(injury_total):
+                days_out = 5 + (index * 3 + injury_index * 7) % 42
+                injury_date = today - timedelta(days=120 + index * 13 + injury_index * 95)
+                severity = severities[(index + injury_index) % len(severities)]
+                InjuryRecord.objects.create(
+                    player=player,
+                    injury_date=injury_date,
+                    body_part=body_parts[(index + injury_index) % len(body_parts)],
+                    injury_type=injury_types[(index + injury_index) % len(injury_types)],
+                    severity=severity,
+                    days_out=days_out,
+                    matches_missed=max(1, days_out // 7),
+                    recovery_date=injury_date + timedelta(days=days_out),
+                    treatment=treatments[(index + injury_index) % len(treatments)],
+                    description=(
+                        f"Травма зафиксирована медицинским штабом {player.club.short_name}. "
+                        f"Игрок пропустил {days_out} дней и {max(1, days_out // 7)} матчей."
+                    ),
+                )
+
         for index, player in enumerate(players):
             latest_assessment = player.latest_assessment
             score = float(latest_assessment.risk_score)
@@ -344,6 +402,7 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS(
                 f"Demo data created: {len(clubs)} clubs, {len(players)} players, "
-                "training loads, risk assessments and hidden rotation plans."
+                f"{InjuryRecord.objects.count()} injuries, training loads, "
+                "risk assessments and rotation plans."
             )
         )

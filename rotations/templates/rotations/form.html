@@ -1,47 +1,22 @@
 {% extends "rotations/base.html" %}
 
-{% block title %}{{ title }} | APL Risk Rotation{% endblock %}
+{% block title %}{{ title }} | Риск травм АПЛ{% endblock %}
 
 {% block content %}
-<section class="container py-4">
-    <div class="row justify-content-center">
-        <div class="col-lg-8 col-xl-7">
-            <div class="panel form-panel">
-                <div class="panel-heading">
-                    <h1>{{ title }}</h1>
-                    {% if player %}
-                        <a class="btn btn-outline-dark btn-sm" href="{{ player.get_absolute_url }}">К игроку</a>
-                    {% endif %}
-                </div>
-                <form method="post" novalidate>
-                    {% csrf_token %}
-                    {% if form.non_field_errors %}
-                        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
-                    {% endif %}
-                    {% for field in form %}
-                        <div class="mb-3{% if field.field.widget.input_type == 'checkbox' %} form-check{% endif %}">
-                            {% if field.field.widget.input_type == 'checkbox' %}
-                                {{ field }}
-                                <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                            {% else %}
-                                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                                {{ field }}
-                            {% endif %}
-                            {% if field.help_text %}
-                                <div class="form-text">{{ field.help_text }}</div>
-                            {% endif %}
-                            {% for error in field.errors %}
-                                <div class="invalid-feedback d-block">{{ error }}</div>
-                            {% endfor %}
-                        </div>
-                    {% endfor %}
-                    <div class="d-flex justify-content-end gap-2">
-                        <a class="btn btn-outline-secondary" href="{% if player %}{{ player.get_absolute_url }}{% else %}{% url 'player_list' %}{% endif %}">Отмена</a>
-                        <button class="btn btn-primary" type="submit">Сохранить</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-</section>
+<h1 class="page-title">{{ title }}</h1>
+
+<div class="panel form-box">
+    <form method="post">
+        {% csrf_token %}
+        {% for field in form %}
+        <p>
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}<span style="color:#dc2626;font-size:0.85rem;">{{ field.errors|striptags }}</span>{% endif %}
+        </p>
+        {% endfor %}
+        <button class="btn" type="submit">Сохранить</button>
+        {% if player %}<a href="{{ player.get_absolute_url }}" style="margin-left:0.5rem;">Отмена</a>{% endif %}
+    </form>
+</div>
 {% endblock %}

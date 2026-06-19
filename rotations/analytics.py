@@ -1,10 +1,11 @@
 from datetime import timedelta
 
 import pandas as pd
-from django.db.models import Avg, Count, Q
+from django.db.models import Avg, Count, Q, Sum
 from django.utils import timezone
 
-from .models import InjuryAssessment, Player, RotationPlan, TrainingLoad
+from .models import InjuryAssessment, InjuryRecord, Player, RotationPlan, TrainingLoad
+from .risk_engine import calculate_player_risk
 
 
 def recent_training_load_frame(player, days=21):
@@ -32,35 +33,23 @@ def recent_training_load_frame(player, days=21):
     return frame.sort_values("date")
 
 
+def player_risk_breakdown(player, on_date=None):
+    assessment = player.latest_assessment
+    result = calculate_player_risk(player, on_date=on_date, assessment=assessment)
+    return {"components": result["components"], "total": result["total"]}
+
+
 def player_risk_projection(player):
     frame = recent_training_load_frame(player)
-    assessment = player.latest_assessment
+    breakdown = player_risk_breakdown(player)
+    projected = breakdown["total"]
 
     if frame.empty:
         avg_load = 0
         avg_sleep = 8
-        sprint_pressure = 0
     else:
         avg_load = frame["load_score"].mean()
         avg_sleep = frame["sleep_hours"].mean()
-        sprint_pressure = min(100, frame["sprint_count"].sum() / 3)
-
-    minutes_component = min(45, player.season_minutes / 3420 * 45)
-    season_injury_component = min(30, player.season_injuries * 10)
-    career_injury_component = min(20, player.career_injuries * 3)
-    recency_component = 0
-    if player.last_injury_date:
-        days_since_injury = (timezone.localdate() - player.last_injury_date).days
-        if days_since_injury <= 30:
-            recency_component = 5
-        elif days_since_injury <= 90:
-            recency_component = 3
-        elif days_since_injury <= 180:
-            recency_component = 1
-    projected = round(
-        min(100, minutes_component + season_injury_component + career_injury_component + recency_component),
-        1,
-    )
 
     if projected >= 70:
         recommendation = RotationPlan.Recommendation.MEDICAL_REVIEW
@@ -82,6 +71,7 @@ def player_risk_projection(player):
         "recommendation": recommendation,
         "recommendation_label": RotationPlan.Recommendation(recommendation).label,
         "planned_minutes": minutes,
+        "breakdown": breakdown["components"],
     }
 
 
@@ -111,10 +101,45 @@ def training_load_chart(player):
     }
 
 
+def injury_stats():
+    records = InjuryRecord.objects.all()
+    total = records.count()
+    if total == 0:
+        return {
+            "total_injuries": 0,
+            "avg_days_out": 0,
+            "total_days_lost": 0,
+            "severe_count": 0,
+            "body_part_labels": [],
+            "body_part_counts": [],
+            "recent_injuries": [],
+        }
+
+    by_part = (
+        records.values("body_part")
+        .annotate(count=Count("id"))
+        .order_by("-count")[:8]
+    )
+    part_labels = {
+        choice[0]: choice[1] for choice in InjuryRecord.BodyPart.choices
+    }
+
+    return {
+        "total_injuries": total,
+        "avg_days_out": round(records.aggregate(avg=Avg("days_out"))["avg"] or 0, 1),
+        "total_days_lost": records.aggregate(total=Sum("days_out"))["total"] or 0,
+        "severe_count": records.filter(severity=InjuryRecord.Severity.SEVERE).count(),
+        "body_part_labels": [part_labels.get(row["body_part"], row["body_part"]) for row in by_part],
+        "body_part_counts": [row["count"] for row in by_part],
+        "recent_injuries": records.select_related("player", "player__club").order_by("-injury_date")[:8],
+    }
+
+
 def dashboard_summary():
     players = Player.objects.select_related("club").annotate(
         avg_risk=Avg("assessments__risk_score"),
         load_records=Count("training_loads"),
+        injury_count=Count("injury_records"),
     )
     player_stats = list(players)
     player_count = len(player_stats)
@@ -131,6 +156,7 @@ def dashboard_summary():
         .annotate(avg_risk=Avg("assessments__risk_score"), player_count=Count("id"))
         .order_by("club__short_name")
     )
+    injury_data = injury_stats()
     return {
         "player_count": player_count,
         "club_count": players.values("club").distinct().count(),
@@ -157,6 +183,7 @@ def dashboard_summary():
             for row in club_rows
         ],
         "top_risk_players": players.filter(avg_risk__isnull=False).order_by("-avg_risk")[:12],
+        **injury_data,
     }
 
 
@@ -164,6 +191,7 @@ def filtered_players(query_params):
     queryset = Player.objects.select_related("club").annotate(
         avg_risk=Avg("assessments__risk_score"),
         load_records=Count("training_loads"),
+        injury_count=Count("injury_records"),
     )
 
     search = query_params.get("q", "").strip()
@@ -201,5 +229,6 @@ def filtered_players(query_params):
         "minutes": "-season_minutes",
         "age": "-age",
         "name": "full_name",
+        "injuries": "-injury_count",
     }
     return queryset.order_by(ordering_map.get(query_params.get("sort"), "-avg_risk"))

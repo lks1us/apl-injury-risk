@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Club, InjuryAssessment, Player, RotationPlan, TrainingLoad
+from .models import Club, DataSyncLog, InjuryAssessment, InjuryRecord, Player, RotationPlan, TrainingLoad
 
 
 @admin.register(Club)
@@ -56,6 +56,28 @@ class InjuryAssessmentAdmin(admin.ModelAdmin):
     list_filter = ("risk_level", "date", "player__club")
     search_fields = ("player__full_name", "player__club__name", "notes")
     readonly_fields = ("risk_score", "risk_level", "created_at")
+
+
+@admin.register(InjuryRecord)
+class InjuryRecordAdmin(admin.ModelAdmin):
+    list_display = (
+        "player",
+        "injury_date",
+        "body_part",
+        "injury_type",
+        "severity",
+        "days_out",
+        "matches_missed",
+    )
+    list_filter = ("severity", "body_part", "injury_date", "player__club")
+    search_fields = ("player__full_name", "injury_type", "description", "treatment")
+
+
+@admin.register(DataSyncLog)
+class DataSyncLogAdmin(admin.ModelAdmin):
+    list_display = ("source", "synced_at", "status", "players_synced", "clubs_synced")
+    list_filter = ("status", "source")
+    readonly_fields = ("synced_at",)
 
 
 @admin.register(RotationPlan)
