@@ -1,6 +1,8 @@
 from datetime import timedelta
 
 from django import forms
+from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.models import User
 from django.utils import timezone
 
 from .models import InjuryAssessment, InjuryRecord, Player, RotationPlan, TrainingLoad
@@ -277,3 +279,23 @@ class RotationPlanForm(BootstrapModelForm):
         if recommendation == RotationPlan.Recommendation.START and planned_minutes is not None and planned_minutes < 60:
             raise forms.ValidationError("Start recommendation should plan at least 60 minutes.")
         return cleaned
+
+
+class SignUpForm(UserCreationForm):
+    class Meta:
+        model = User
+        fields = ("username", "password1", "password2")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        labels = {
+            "username": "Имя пользователя",
+            "password1": "Пароль",
+            "password2": "Подтверждение пароля",
+        }
+        for name, label in labels.items():
+            self.fields[name].label = label
+            self.fields[name].widget.attrs.setdefault("class", "form-control")
+        self.fields["username"].help_text = "Латиница, цифры и символы @/./+/-/_"
+        self.fields["password1"].help_text = "Минимум 8 символов, не только цифры."
+        self.fields["password2"].help_text = "Повторите пароль для проверки."

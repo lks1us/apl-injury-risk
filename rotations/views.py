@@ -1,6 +1,7 @@
 import json
 
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.db.models import Avg, Count
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -19,6 +20,7 @@ from .forms import (
     InjuryUpdateForm,
     PlayerForm,
     RotationPlanForm,
+    SignUpForm,
     TrainingLoadForm,
 )
 from .models import Club, InjuryAssessment, InjuryRecord, Player, RotationPlan
@@ -136,6 +138,18 @@ class RotationBoardView(ListView):
         return context
 
 
+def register(request):
+    if request.user.is_authenticated:
+        return redirect("dashboard")
+    form = SignUpForm(request.POST or None)
+    if form.is_valid():
+        form.save()
+        messages.success(request, "Аккаунт создан. Войдите, чтобы добавлять игроков.")
+        return redirect("login")
+    return render(request, "registration/register.html", {"form": form})
+
+
+@login_required
 def player_create(request):
     form = PlayerForm(request.POST or None)
     if form.is_valid():

@@ -15,9 +15,25 @@
     </header>
 
     <nav class="nav">
-        <a href="{% url 'dashboard' %}">Главная</a>
-        <a href="{% url 'player_list' %}">Игроки</a>
-        <a href="{% url 'player_create' %}">Добавить игрока</a>
+        <div class="nav-links">
+            <a href="{% url 'dashboard' %}">Главная</a>
+            <a href="{% url 'player_list' %}">Игроки</a>
+            {% if user.is_authenticated %}
+            <a href="{% url 'player_create' %}">Добавить игрока</a>
+            {% endif %}
+        </div>
+        <div class="nav-auth">
+            {% if user.is_authenticated %}
+            <span class="nav-user">{{ user.username }}</span>
+            <form method="post" action="{% url 'logout' %}" class="logout-form">
+                {% csrf_token %}
+                <button type="submit" class="btn-link">Выйти</button>
+            </form>
+            {% else %}
+            <a href="{% url 'login' %}">Вход</a>
+            <a href="{% url 'register' %}">Регистрация</a>
+            {% endif %}
+        </div>
     </nav>
 
     {% if messages %}

@@ -11,6 +11,7 @@ BASE = Path(__file__).resolve().parent.parent
 
 UPLOADS = [
     "apl_risk/settings.py",
+    "apl_risk/urls.py",
     "rotations/models.py",
     "rotations/risk_engine.py",
     "rotations/analytics.py",
@@ -31,6 +32,8 @@ UPLOADS = [
     "rotations/templates/rotations/player_detail.html",
     "rotations/templates/rotations/player_list.html",
     "rotations/templates/rotations/form.html",
+    "templates/registration/login.html",
+    "templates/registration/register.html",
     "README.md",
 ]
 
